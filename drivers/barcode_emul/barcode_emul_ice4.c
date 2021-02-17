@@ -49,8 +49,6 @@
 #include "barcode_emul_ice4.h"
 #include <linux/err.h>
 
-#define US_TO_PATTERN		1000000
-
 #if defined(TEST_DEBUG)
 #define pr_barcode	pr_emerg
 #else
@@ -65,7 +63,6 @@
 #define SEC_FPGA_MAX_FW_PATH	255
 #define SEC_FPGA_FW_FILENAME		"i2c_top_bitmap.bin"
 
-#define IRDA_BUFFER_MAX_SIZE	255
 #define BARCODE_I2C_ADDR	0x6C
 #define FIRMWARE_MAX_RETRY	2
 #define GPIO_FPGA_MAIN_CLK 26
@@ -719,7 +716,7 @@ static ssize_t barcode_ver_check_show(struct device *dev,
 	barcode_emul_read(data->client, FW_VER_ADDR, 1, &fw_ver);
 	fw_ver = (fw_ver >> 5) & 0x7;
 
-	return snprintf(buf, IRDA_BUFFER_MAX_SIZE, "%d\n", fw_ver+14);
+	return sprintf(buf, "%d\n", fw_ver+14);
 }
 
 static DEVICE_ATTR(barcode_ver_check, 0664, barcode_ver_check_show, NULL);
@@ -732,7 +729,7 @@ static ssize_t barcode_led_status_show(struct device *dev,
 	u8 status;
 	barcode_emul_read(data->client, BEAM_STATUS_ADDR, 1, &status);
 	status = status & 0x1;
-	return snprintf(buf, IRDA_BUFFER_MAX_SIZE, "%d\n", status);
+	return sprintf(buf, "%d\n", status);
 }
 static DEVICE_ATTR(barcode_led_status, 0664, barcode_led_status_show, NULL);
 
@@ -767,6 +764,8 @@ static void ir_remocon_work(struct barcode_emul_data *ir_data, int count)
 
 	int buf_size = count+2;
 	int ret;
+	int sleep_timing;
+	int end_data;
 	int emission_time;
 	int ack_pin_onoff;
 
@@ -837,6 +836,18 @@ static void ir_remocon_work(struct barcode_emul_data *ir_data, int count)
 	}
 */
 	data->count = 2;
+
+	end_data = data->i2c_block_transfer.data[count-2] << 8
+		| data->i2c_block_transfer.data[count-1];
+
+	emission_time = \
+		(1000 * (data->ir_sum - end_data) / (data->ir_freq)) + 10;
+	sleep_timing = emission_time - 130;
+	if (sleep_timing > 0)
+		msleep(sleep_timing);
+/*
+	printk(KERN_INFO "%s: sleep_timing = %d\n", __func__, sleep_timing);
+*/
 	emission_time = \
 		(1000 * (data->ir_sum) / (data->ir_freq)) + 50;
 	if (emission_time > 0)
@@ -870,8 +881,8 @@ static ssize_t remocon_store(struct device *dev, struct device_attribute *attr,
 		const char *buf, size_t size)
 {
 	struct barcode_emul_data *data = dev_get_drvdata(dev);
-	unsigned int _data, _tdata;
-	int count, i, converting_factor = 1;
+	unsigned int _data;
+	int count, i;
 
 	pr_barcode("ir_send called\n");
 
@@ -881,7 +892,6 @@ static ssize_t remocon_store(struct device *dev, struct device_attribute *attr,
 				break;
 			if (data->count == 2) {
 				data->ir_freq = _data;
-				converting_factor = US_TO_PATTERN / data->ir_freq;
 				if (data->on_off) {
 					irda_wake_en(0);
 					usleep_range(200, 300);
@@ -900,13 +910,12 @@ static ssize_t remocon_store(struct device *dev, struct device_attribute *attr,
 								= _data & 0xFF;
 				data->count += 3;
 			} else {
-				_tdata = _data / converting_factor;
-				data->ir_sum += _tdata;
+				data->ir_sum += _data;
 				count = data->count;
 				data->i2c_block_transfer.data[count]
-								= _tdata >> 8;
+								= _data >> 8;
 				data->i2c_block_transfer.data[count+1]
-								= _tdata & 0xFF;
+								= _data & 0xFF;
 				data->count += 2;
 			}
 
