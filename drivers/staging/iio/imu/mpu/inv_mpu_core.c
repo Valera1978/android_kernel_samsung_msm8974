@@ -53,9 +53,7 @@
 
 s64 get_time_ns(void)
 {
-	struct timespec ts;
-	ktime_get_ts(&ts);
-	return timespec_to_ns(&ts);
+	return ktime_to_ns(ktime_get_boottime());
 }
 
 /* This is for compatibility for power state. Should remove once HAL
@@ -2924,6 +2922,7 @@ static int accel_do_calibrate(struct inv_mpu_state *st, int enable)
 	signed short x, y, z;
 	struct inv_reg_map_s *reg;
 	int result, i;
+	signed short m[9];
 	unsigned char data[6];
 	int acc_enable;
 	struct file *cal_filp;
@@ -2933,6 +2932,9 @@ static int accel_do_calibrate(struct inv_mpu_state *st, int enable)
 	reg = &(st->reg);
 
 	if (enable) {
+		for (i = 0; i < 9; i++)
+			m[i] = st->plat_data.orientation[i];
+
 		if (!st->chip_config.enable) {
 				result = st->set_power_state(st, true);
 				if (result) {
@@ -2963,12 +2965,12 @@ static int accel_do_calibrate(struct inv_mpu_state *st, int enable)
 			y = (signed short)(((data[2] << 8) | data[3])*st->chip_info.multi);
 			z = (signed short)(((data[4] << 8) | data[5])*st->chip_info.multi);
 
-			sum[0] += 0 - x;
-			sum[1] += 0 - y;
-			if (z > 0)
-				sum[2] += 16383 - z;
+			sum[0] += (0 - (m[0] * x + m[1] * y + m[2] * z));
+			sum[1] += (0 - (m[3] * x + m[4] * y + m[5] * z));
+			if ((m[6] * x + m[7] * y + m[8] * z) > 0)
+				sum[2] += (16383 - (m[6] * x + m[7] * y + m[8] * z));
 			else
-				sum[2] += -16383 - z;
+				sum[2] += (-16383 - (m[6] * x + m[7] * y + m[8] * z));
 			usleep_range(10000, 11000);
 		}
 
@@ -3312,7 +3314,7 @@ static ssize_t inv_mpu_selftest_show(struct device *dev,
 		struct device_attribute *attr, char *buf)
 {
 	struct inv_mpu_state *st;
-	int result, success, hwsuccess;
+	int result, success, hwsuccess = -1;
 	int scaled_gyro_bias[3] = {0};
 	int scaled_gyro_rms[3] = {0};
 	int packet_count[3] = {0};
@@ -3525,7 +3527,7 @@ static ssize_t inv_mag_adc_show(struct device *dev,
 	struct inv_mpu_state *st;
 	struct inv_chip_config_s *conf;
 	int result, success = 0;
-	short sen[3];
+	short sen[3] = {-1,};
 	u8 data[8] = {0,}, enable;
 	pr_info("%s", __func__);
 	st = dev_get_drvdata(dev);
@@ -3681,7 +3683,7 @@ static ssize_t inv_mag_selftest_show(struct device *dev,
 	s8 iResult[7] = {-1, };
 	short x = 0, y = 0 , z = 0;
 	unsigned char *sens;
-	short sen[3];
+	short sen[3] = {-1, };
 	struct inv_mpu_state *st = dev_get_drvdata(dev);
 	sens = st->chip_info.compass_sens;
 	pr_info("%s", __func__);
@@ -4104,14 +4106,12 @@ static int inv_mpu_parse_dt(struct mpu_platform_data *data, struct device *dev)
 		data->sec_slave_id = (u8)temp;
 	}
 
-	if (data->sec_slave_type != SECONDARY_SLAVE_TYPE_NONE) {
-		if (of_property_read_u32(this_node,
-				"mpu9250,secondary_i2c_addr", &temp) < 0) {
-			pr_err("%s : get secondary_i2c_addr(%d) error\n", __func__, temp);
-			return -ENODEV;
-		} else {
-			data->secondary_i2c_addr = (u16)temp;
-		}
+	if (of_property_read_u32(this_node,
+			"mpu9250,secondary_i2c_addr", &temp) < 0) {
+		pr_err("%s : get secondary_i2c_addr(%d) error\n", __func__, temp);
+		return -ENODEV;
+	} else {
+		data->secondary_i2c_addr = (u16)temp;
 	}
 
 	if (of_property_read_u32_array(this_node,
@@ -4122,15 +4122,13 @@ static int inv_mpu_parse_dt(struct mpu_platform_data *data, struct device *dev)
 	for (i = 0 ; i < 9 ; i++)
 		data->orientation[i] = ((s8)orientation[i]) - 1;
 
-	if (data->sec_slave_type != SECONDARY_SLAVE_TYPE_NONE) {
-		if (of_property_read_u32_array(this_node,
-			"mpu9250,secondary_orientation", orientation, 9) < 0) {
-			pr_err("%s : get secondary_orientation(%d) error\n", __func__, orientation[0]);
-			return -ENODEV;
-		}
-		for (i = 0 ; i < 9 ; i++)
-			data->secondary_orientation[i] = ((s8)orientation[i]) - 1;
+	if (of_property_read_u32_array(this_node,
+		"mpu9250,secondary_orientation", orientation, 9) < 0) {
+		pr_err("%s : get secondary_orientation(%d) error\n", __func__, orientation[0]);
+		return -ENODEV;
 	}
+	for (i = 0 ; i < 9 ; i++)
+		data->secondary_orientation[i] = ((s8)orientation[i]) - 1;
 
 	if (of_property_read_u32_array(this_node,
 		"mpu9250,key", key, 16) < 0) {
@@ -4173,28 +4171,6 @@ static int inv_mpu_regulator_onoff(struct device *dev, bool onoff)
 	devm_regulator_put(mpu9250_vcc);
 	devm_regulator_put(mpu9250_lvs1);
 	msleep(10);
-
-	return 0;
-}
-
-static int inv_mpu_regulator_onoff_primary(struct device *dev, bool onoff)
-{
-	struct regulator *mpu9250_lvs1;
-
-	mpu9250_lvs1 = devm_regulator_get(dev, "mpu9250-lvs1");
-	if (IS_ERR(mpu9250_lvs1)) {
-		pr_err("%s: cannot get mpu9250_lvs1\n", __func__);
-		return -ENODEV;
-	}
-
-	if (onoff) {
-		regulator_enable(mpu9250_lvs1);
-	} else {
-		regulator_disable(mpu9250_lvs1);
-	}
-
-	devm_regulator_put(mpu9250_lvs1);
-	msleep(20);
 
 	return 0;
 }
@@ -4252,17 +4228,14 @@ static int inv_mpu_probe(struct i2c_client *client,
 	st->sl_handle = client->adapter;
 	st->i2c_addr = client->addr;
 
+	inv_mpu_regulator_onoff(&client->dev, true);
+
 	result = inv_mpu_parse_dt(&st->plat_data, &client->dev);
 	if (result) {
 		dev_err(&client->adapter->dev,
 			"Could not initialize device.\n");
 		goto out_free;
 	}
-
-	if(st->plat_data.sec_slave_type == SECONDARY_SLAVE_TYPE_NONE)
-		inv_mpu_regulator_onoff_primary(&client->dev, true);
-	else
-		inv_mpu_regulator_onoff(&client->dev, true);
 
 	result = inv_mpu_pin(client, (unsigned)st->plat_data.irq);
 	if (result)
@@ -4426,10 +4399,7 @@ static void inv_mpu_shutdown(struct i2c_client *client)
 		dev_err(&client->adapter->dev, "Failed to turn off %s\n",
 			st->hw->name);
 
-	if(st->plat_data.sec_slave_type == SECONDARY_SLAVE_TYPE_NONE)
-		inv_mpu_regulator_onoff_primary(&client->dev, false);
-	else
-		inv_mpu_regulator_onoff(&client->dev, false);
+	inv_mpu_regulator_onoff(&client->dev, false);
 
 	pr_info("[SENSOR] %s is done\n", __func__);
 }
