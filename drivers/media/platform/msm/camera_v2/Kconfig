@@ -109,10 +109,10 @@ config IMX134
 		Video HDR support.
 
 config IMX135
-	bool "Sensor IMX135 (BAYER 13M)"
+	bool "Sensor IMX135 (BAYER 12M)"
 	depends on MSMB_CAMERA
 	---help---
-		Sony 13 MP Bayer Sensor with auto focus, uses
+		Sony 12 MP Bayer Sensor with auto focus, uses
 		4 mipi lanes, preview config = 2104 x 1560 at 49 fps,
 		snapshot config = 4208 x 3120 at 24 fps,
 		Video HDR support.
@@ -125,14 +125,6 @@ config S5K6B2YX
 		Supports low-power vision mode.
 		This sensor does not support auto focus.
 
-config S5K8B1YX
-	bool "Sensor S5K8B1YX (BAYER 2M)"
-	depends on MSMB_CAMERA
-	---help---
-		LSI 2 MP Bayer Sensor, supports 2 mipi lanes,
-		preview and snapshot config at 1280*720 at 30 fps,
-		hfr video at 60, 90 and 120 fps. This sensor driver does
-		not support auto focus.
 config OV2720
 	bool "Sensor OV2720 (BAYER 2M)"
 	depends on MSMB_CAMERA
@@ -168,8 +160,3 @@ config MSMB_JPEG
 	  This module serves as the common driver
 	  for the JPEG 1.0 encoder and decoder.
 
-config COMPANION
-        tristate "External companion support"
-        depends on MSMB_CAMERA && ARCH_MSM8974
-        ---help---
-          Enables support for external companion chip for 8974.

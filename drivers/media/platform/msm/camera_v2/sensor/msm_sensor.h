@@ -45,14 +45,14 @@ enum msm_sensor_state_t {
 struct msm_sensor_fn_t {
 	int (*sensor_config) (struct msm_sensor_ctrl_t *, void __user *);
 	int (*sensor_power_down) (struct msm_sensor_ctrl_t *,
-				  struct msm_camera_power_ctrl_t *,
-				  enum msm_camera_device_type_t, struct msm_camera_i2c_client *);
+		struct msm_camera_power_ctrl_t *,	
+		enum msm_camera_device_type_t, struct msm_camera_i2c_client *);
 	int (*sensor_power_up) (struct msm_sensor_ctrl_t *,
-				struct msm_camera_power_ctrl_t *,
-				struct msm_camera_i2c_client *,
-				struct msm_camera_slave_info *, const char *);
+		struct msm_camera_power_ctrl_t *,
+		struct msm_camera_i2c_client *,
+		struct msm_camera_slave_info *, const char *);
 	int (*sensor_match_id) (struct msm_camera_i2c_client *,
-				struct msm_camera_slave_info *, const char *);
+		struct msm_camera_slave_info *, const char *);
 };
 
 struct msm_sensor_ctrl_t {
@@ -80,29 +80,29 @@ struct msm_sensor_ctrl_t {
 int msm_sensor_config(struct msm_sensor_ctrl_t *s_ctrl, void __user *argp);
 
 int msm_sensor_power_up(struct msm_sensor_ctrl_t *s_ctrl,
-			struct msm_camera_power_ctrl_t *power_info,
-			struct msm_camera_i2c_client *sensor_i2c_client,
-			struct msm_camera_slave_info *slave_info,
-			const char *sensor_name);
+	struct msm_camera_power_ctrl_t *power_info,
+	struct msm_camera_i2c_client *sensor_i2c_client,
+	struct msm_camera_slave_info *slave_info,
+	const char *sensor_name);
 
 int msm_sensor_power_down(struct msm_sensor_ctrl_t *s_ctrl,
-			  struct msm_camera_power_ctrl_t *,
-			  enum msm_camera_device_type_t, struct msm_camera_i2c_client *);
+	struct msm_camera_power_ctrl_t *,
+	enum msm_camera_device_type_t, struct msm_camera_i2c_client *);
 
 int msm_sensor_check_id(struct msm_sensor_ctrl_t *,
-			struct msm_camera_i2c_client *,
-			struct msm_camera_slave_info *,
-			const char *);
+	struct msm_camera_i2c_client *,
+	struct msm_camera_slave_info *,
+	const char *);
 int msm_sensor_match_id(struct msm_camera_i2c_client *,
-			struct msm_camera_slave_info *,
-			const char *);
+	struct msm_camera_slave_info *,
+	const char *);
 
 int msm_sensor_update_cfg(struct msm_sensor_ctrl_t *s_ctrl);
 int msm_sensor_platform_probe(struct platform_device *pdev,
-			      void *data);
+	void *data);
 
 int msm_sensor_i2c_probe(struct i2c_client *client,
-			 const struct i2c_device_id *id, struct msm_sensor_ctrl_t *s_ctrl);
+	const struct i2c_device_id *id, struct msm_sensor_ctrl_t *s_ctrl);
 
 int msm_sensor_free_sensor_data(struct msm_sensor_ctrl_t *s_ctrl);
 

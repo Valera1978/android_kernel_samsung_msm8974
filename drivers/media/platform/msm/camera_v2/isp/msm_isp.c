@@ -44,7 +44,7 @@ static const struct of_device_id msm_vfe_dt_match[] = {
 MODULE_DEVICE_TABLE(of, msm_vfe_dt_match);
 
 static const struct platform_device_id msm_vfe_dev_id[] = {
-	{ "msm_vfe32", (kernel_ulong_t)&vfe32_hw_info },
+	{"msm_vfe32", (kernel_ulong_t) &vfe32_hw_info},
 	{}
 };
 
@@ -58,14 +58,14 @@ static int __devinit vfe_probe(struct platform_device *pdev)
 	int rc = 0;
 
 	struct msm_iova_partition vfe_partition = {
-		.start	= SZ_128K,
-		.size	= SZ_2G - SZ_128K,
+		.start = SZ_128K,
+		.size = SZ_2G - SZ_128K,
 	};
 	struct msm_iova_layout vfe_layout = {
-		.partitions	= &vfe_partition,
-		.npartitions	= 1,
-		.client_name	= "vfe",
-		.domain_flags	= 0,
+		.partitions = &vfe_partition,
+		.npartitions = 1,
+		.client_name = "vfe",
+		.domain_flags = 0,
 	};
 
 	vfe_dev = kzalloc(sizeof(struct vfe_device), GFP_KERNEL);
@@ -76,18 +76,18 @@ static int __devinit vfe_probe(struct platform_device *pdev)
 
 	if (pdev->dev.of_node) {
 		of_property_read_u32((&pdev->dev)->of_node,
-				     "cell-index", &pdev->id);
+			"cell-index", &pdev->id);
 		match_dev = of_match_device(msm_vfe_dt_match, &pdev->dev);
 		vfe_dev->hw_info =
-			(struct msm_vfe_hardware_info *)match_dev->data;
+			(struct msm_vfe_hardware_info *) match_dev->data;
 	} else {
 		vfe_dev->hw_info = (struct msm_vfe_hardware_info *)
-				   platform_get_device_id(pdev)->driver_data;
+			platform_get_device_id(pdev)->driver_data;
 	}
 
 	if (!vfe_dev->hw_info) {
 		pr_err("%s: No vfe hardware info\n", __func__);
-		kfree(vfe_dev); //prevent
+		kfree(vfe_dev);//prevent
 		return -EINVAL;
 	}
 	ISP_DBG("%s: device id = %d\n", __func__, pdev->id);
@@ -101,16 +101,15 @@ static int __devinit vfe_probe(struct platform_device *pdev)
 	}
 
 	INIT_LIST_HEAD(&vfe_dev->tasklet_q);
-	INIT_LIST_HEAD(&vfe_dev->tasklet_regupdate_q);
 	tasklet_init(&vfe_dev->vfe_tasklet,
-		     msm_isp_do_tasklet, (unsigned long)vfe_dev);
+		msm_isp_do_tasklet, (unsigned long)vfe_dev);
 
 	v4l2_subdev_init(&vfe_dev->subdev.sd, vfe_dev->hw_info->subdev_ops);
 	vfe_dev->subdev.sd.internal_ops =
 		vfe_dev->hw_info->subdev_internal_ops;
 	snprintf(vfe_dev->subdev.sd.name,
-		 ARRAY_SIZE(vfe_dev->subdev.sd.name),
-		 "vfe");
+		ARRAY_SIZE(vfe_dev->subdev.sd.name),
+		"vfe");
 	vfe_dev->subdev.sd.flags |= V4L2_SUBDEV_FL_HAS_DEVNODE;
 	vfe_dev->subdev.sd.flags |= V4L2_SUBDEV_FL_HAS_EVENTS;
 	v4l2_set_subdevdata(&vfe_dev->subdev.sd, vfe_dev);
@@ -133,30 +132,29 @@ static int __devinit vfe_probe(struct platform_device *pdev)
 
 	vfe_dev->buf_mgr = &vfe_buf_mgr;
 	v4l2_subdev_notify(&vfe_dev->subdev.sd,
-			   MSM_SD_NOTIFY_REQ_CB, &vfe_vb2_ops);
+		MSM_SD_NOTIFY_REQ_CB, &vfe_vb2_ops);
 	rc = msm_isp_create_isp_buf_mgr(vfe_dev->buf_mgr,
-					&vfe_vb2_ops, &vfe_layout);
+		&vfe_vb2_ops, &vfe_layout);
 	if (rc < 0) {
 		pr_err("%s: Unable to create buffer manager\n", __func__);
-		msm_sd_unregister(&vfe_dev->subdev);
 		kfree(vfe_dev);
 		return -EINVAL;
 	}
 	vfe_dev->buf_mgr->ops->register_ctx(vfe_dev->buf_mgr,
-					    &vfe_dev->iommu_ctx[0], vfe_dev->hw_info->num_iommu_ctx);
+		&vfe_dev->iommu_ctx[0], vfe_dev->hw_info->num_iommu_ctx);
 	vfe_dev->vfe_open_cnt = 0;
- end:
+end:
 	return rc;
 }
 
 static struct platform_driver vfe_driver = {
-	.probe			= vfe_probe,
-	.driver			= {
-		.name		= "msm_vfe",
-		.owner		= THIS_MODULE,
+	.probe = vfe_probe,
+	.driver = {
+		.name = "msm_vfe",
+		.owner = THIS_MODULE,
 		.of_match_table = msm_vfe_dt_match,
 	},
-	.id_table		= msm_vfe_dev_id,
+	.id_table = msm_vfe_dev_id,
 };
 
 static int __init msm_vfe_init_module(void)

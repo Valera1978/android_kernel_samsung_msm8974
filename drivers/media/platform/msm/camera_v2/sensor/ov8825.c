@@ -33,38 +33,38 @@ static struct v4l2_subdev_info ov8825_subdev_info[] = {
 };
 
 static const struct i2c_device_id ov8825_i2c_id[] = {
-	{ OV8825_SENSOR_NAME, (kernel_ulong_t)&ov8825_s_ctrl },
+	{OV8825_SENSOR_NAME, (kernel_ulong_t)&ov8825_s_ctrl},
 	{ }
 };
 
 static int32_t msm_ov8825_i2c_probe(struct i2c_client *client,
-				    const struct i2c_device_id *id)
+	const struct i2c_device_id *id)
 {
 	return msm_sensor_i2c_probe(client, id, &ov8825_s_ctrl);
 }
 static struct i2c_driver ov8825_i2c_driver = {
-	.id_table	= ov8825_i2c_id,
-	.probe		= msm_ov8825_i2c_probe,
-	.driver		= {
-		.name	= OV8825_SENSOR_NAME,
+	.id_table = ov8825_i2c_id,
+	.probe  = msm_ov8825_i2c_probe,
+	.driver = {
+		.name = OV8825_SENSOR_NAME,
 	},
 };
 
 static struct msm_camera_i2c_client ov8825_sensor_i2c_client = {
-	.addr_type	= MSM_CAMERA_I2C_WORD_ADDR,
+	.addr_type = MSM_CAMERA_I2C_WORD_ADDR,
 };
 
 static const struct of_device_id ov8825_dt_match[] = {
-	{ .compatible = "qcom,ov8825", .data = &ov8825_s_ctrl },
+	{.compatible = "qcom,ov8825", .data = &ov8825_s_ctrl},
 	{}
 };
 
 MODULE_DEVICE_TABLE(of, ov8825_dt_match);
 
 static struct platform_driver ov8825_platform_driver = {
-	.driver			= {
-		.name		= "qcom,ov8825",
-		.owner		= THIS_MODULE,
+	.driver = {
+		.name = "qcom,ov8825",
+		.owner = THIS_MODULE,
 		.of_match_table = ov8825_dt_match,
 	},
 };
@@ -73,7 +73,6 @@ static int32_t ov8825_platform_probe(struct platform_device *pdev)
 {
 	int32_t rc = 0;
 	const struct of_device_id *match;
-
 	match = of_match_device(ov8825_dt_match, &pdev->dev);
 	rc = msm_sensor_platform_probe(pdev, match->data);
 	return rc;
@@ -82,10 +81,9 @@ static int32_t ov8825_platform_probe(struct platform_device *pdev)
 static int __init ov8825_init_module(void)
 {
 	int32_t rc = 0;
-
 	CDBG("%s:%d Enter\n", __func__, __LINE__);
 	rc = platform_driver_probe(&ov8825_platform_driver,
-				   ov8825_platform_probe);
+		ov8825_platform_probe);
 	if (!rc) {
 		pr_info("%s: probe success\n", __func__);
 		return rc;
@@ -105,10 +103,10 @@ static void __exit ov8825_exit_module(void)
 }
 
 static struct msm_sensor_ctrl_t ov8825_s_ctrl = {
-	.sensor_i2c_client		= &ov8825_sensor_i2c_client,
-	.msm_sensor_mutex		= &ov8825_mut,
-	.sensor_v4l2_subdev_info	= ov8825_subdev_info,
-	.sensor_v4l2_subdev_info_size	= ARRAY_SIZE(ov8825_subdev_info),
+	.sensor_i2c_client = &ov8825_sensor_i2c_client,
+	.msm_sensor_mutex = &ov8825_mut,
+	.sensor_v4l2_subdev_info = ov8825_subdev_info,
+	.sensor_v4l2_subdev_info_size = ARRAY_SIZE(ov8825_subdev_info),
 };
 
 module_init(ov8825_init_module);

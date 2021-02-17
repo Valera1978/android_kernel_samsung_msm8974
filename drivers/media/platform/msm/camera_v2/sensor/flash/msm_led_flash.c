@@ -18,17 +18,16 @@
 /*#define CONFIG_MSMB_CAMERA_DEBUG*/
 #undef CDBG
 #ifdef CONFIG_MSMB_CAMERA_DEBUG
-#define CDBG(fmt, args ...) pr_err(fmt, ## args)
+#define CDBG(fmt, args...) pr_err(fmt, ##args)
 #else
-#define CDBG(fmt, args ...) do { } while (0)
+#define CDBG(fmt, args...) do { } while (0)
 #endif
 
 static long msm_led_flash_subdev_ioctl(struct v4l2_subdev *sd,
-				       unsigned int cmd, void *arg)
+	unsigned int cmd, void *arg)
 {
 	struct msm_led_flash_ctrl_t *fctrl = NULL;
-	void __user *argp = (void __user*)arg;
-
+	void __user *argp = (void __user *)arg;
 	if (!sd) {
 		pr_err("sd NULL\n");
 		return -EINVAL;
@@ -50,11 +49,11 @@ static long msm_led_flash_subdev_ioctl(struct v4l2_subdev *sd,
 }
 
 static struct v4l2_subdev_core_ops msm_flash_subdev_core_ops = {
-	.ioctl	= msm_led_flash_subdev_ioctl,
+	.ioctl = msm_led_flash_subdev_ioctl,
 };
 
 static struct v4l2_subdev_ops msm_flash_subdev_ops = {
-	.core	= &msm_flash_subdev_core_ops,
+	.core = &msm_flash_subdev_core_ops,
 };
 
 static const struct v4l2_subdev_internal_ops msm_flash_internal_ops;
@@ -63,7 +62,6 @@ int32_t msm_led_flash_create_v4lsubdev(struct platform_device *pdev, void *data)
 {
 	struct msm_led_flash_ctrl_t *fctrl =
 		(struct msm_led_flash_ctrl_t *)data;
-
 	CDBG("Enter\n");
 
 	if (!fctrl) {
@@ -79,7 +77,7 @@ int32_t msm_led_flash_create_v4lsubdev(struct platform_device *pdev, void *data)
 	fctrl->msm_sd.sd.internal_ops = &msm_flash_internal_ops;
 	fctrl->msm_sd.sd.flags |= V4L2_SUBDEV_FL_HAS_DEVNODE;
 	snprintf(fctrl->msm_sd.sd.name, ARRAY_SIZE(fctrl->msm_sd.sd.name),
-		 "msm_flash");
+		"msm_flash");
 	media_entity_init(&fctrl->msm_sd.sd.entity, 0, NULL, 0);
 	fctrl->msm_sd.sd.entity.type = MEDIA_ENT_T_V4L2_SUBDEV;
 	fctrl->msm_sd.sd.entity.group_id = MSM_CAMERA_SUBDEV_LED_FLASH;

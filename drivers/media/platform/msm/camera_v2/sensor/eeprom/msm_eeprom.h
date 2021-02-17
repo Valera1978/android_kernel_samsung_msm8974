@@ -27,8 +27,7 @@ struct msm_eeprom_ctrl_t;
 #define DEFINE_MSM_MUTEX(mutexname) \
 	static struct mutex mutexname = __MUTEX_INITIALIZER(mutexname)
 
-#define PROPERTY_MAXSIZE  32
-#define MAP_VERSION_ADDR  (0x0063)
+#define PROPERTY_MAXSIZE 32
 
 struct msm_eeprom_ctrl_t {
 	struct platform_device *pdev;
@@ -42,9 +41,9 @@ struct msm_eeprom_ctrl_t {
 
 	struct msm_camera_i2c_client i2c_client;
 	struct msm_eeprom_memory_block_t cal_data;
-	uint16_t is_supported;
+	uint8_t is_supported;
 	struct msm_eeprom_board_info *eboard_info;
 	uint32_t subdev_id;
 };
 
-#endif
+#endif 

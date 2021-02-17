@@ -33,38 +33,38 @@ static struct v4l2_subdev_info s5k3l1yx_subdev_info[] = {
 };
 
 static const struct i2c_device_id s5k3l1yx_i2c_id[] = {
-	{ S5K3L1YX_SENSOR_NAME, (kernel_ulong_t)&s5k3l1yx_s_ctrl },
+	{S5K3L1YX_SENSOR_NAME, (kernel_ulong_t)&s5k3l1yx_s_ctrl},
 	{ }
 };
 
 static int32_t msm_s5k3l1yx_i2c_probe(struct i2c_client *client,
-				      const struct i2c_device_id *id)
+	const struct i2c_device_id *id)
 {
 	return msm_sensor_i2c_probe(client, id, &s5k3l1yx_s_ctrl);
 }
 static struct i2c_driver s5k3l1yx_i2c_driver = {
-	.id_table	= s5k3l1yx_i2c_id,
-	.probe		= msm_s5k3l1yx_i2c_probe,
-	.driver		= {
-		.name	= S5K3L1YX_SENSOR_NAME,
+	.id_table = s5k3l1yx_i2c_id,
+	.probe  = msm_s5k3l1yx_i2c_probe,
+	.driver = {
+		.name = S5K3L1YX_SENSOR_NAME,
 	},
 };
 
 static struct msm_camera_i2c_client s5k3l1yx_sensor_i2c_client = {
-	.addr_type	= MSM_CAMERA_I2C_WORD_ADDR,
+	.addr_type = MSM_CAMERA_I2C_WORD_ADDR,
 };
 
 static const struct of_device_id s5k3l1yx_dt_match[] = {
-	{ .compatible = "qcom,s5k3l1yx", .data = &s5k3l1yx_s_ctrl },
+	{.compatible = "qcom,s5k3l1yx", .data = &s5k3l1yx_s_ctrl},
 	{}
 };
 
 MODULE_DEVICE_TABLE(of, s5k3l1yx_dt_match);
 
 static struct platform_driver s5k3l1yx_platform_driver = {
-	.driver			= {
-		.name		= "qcom,s5k3l1yx",
-		.owner		= THIS_MODULE,
+	.driver = {
+		.name = "qcom,s5k3l1yx",
+		.owner = THIS_MODULE,
 		.of_match_table = s5k3l1yx_dt_match,
 	},
 };
@@ -73,7 +73,6 @@ static int32_t s5k3l1yx_platform_probe(struct platform_device *pdev)
 {
 	int32_t rc = 0;
 	const struct of_device_id *match;
-
 	match = of_match_device(s5k3l1yx_dt_match, &pdev->dev);
 	rc = msm_sensor_platform_probe(pdev, match->data);
 	return rc;
@@ -82,10 +81,9 @@ static int32_t s5k3l1yx_platform_probe(struct platform_device *pdev)
 static int __init s5k3l1yx_init_module(void)
 {
 	int32_t rc = 0;
-
 	CDBG("%s:%d init\n", __func__, __LINE__);
 	rc = platform_driver_probe(&s5k3l1yx_platform_driver,
-				   s5k3l1yx_platform_probe);
+		s5k3l1yx_platform_probe);
 	if (!rc) {
 		pr_info("%s: probe success\n", __func__);
 		return rc;
@@ -105,10 +103,10 @@ static void __exit s5k3l1yx_exit_module(void)
 }
 
 static struct msm_sensor_ctrl_t s5k3l1yx_s_ctrl = {
-	.sensor_i2c_client		= &s5k3l1yx_sensor_i2c_client,
-	.msm_sensor_mutex		= &s5k3l1yx_mut,
-	.sensor_v4l2_subdev_info	= s5k3l1yx_subdev_info,
-	.sensor_v4l2_subdev_info_size	= ARRAY_SIZE(s5k3l1yx_subdev_info),
+	.sensor_i2c_client = &s5k3l1yx_sensor_i2c_client,
+	.msm_sensor_mutex = &s5k3l1yx_mut,
+	.sensor_v4l2_subdev_info = s5k3l1yx_subdev_info,
+	.sensor_v4l2_subdev_info_size = ARRAY_SIZE(s5k3l1yx_subdev_info),
 };
 
 module_init(s5k3l1yx_init_module);
