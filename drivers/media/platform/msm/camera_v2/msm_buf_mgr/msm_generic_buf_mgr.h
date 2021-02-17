@@ -29,7 +29,6 @@ struct msm_get_bufs {
 	struct vb2_buffer *vb2_buf;
 	uint32_t session_id;
 	uint32_t stream_id;
-	uint32_t index;
 };
 
 struct msm_buf_mngr_device {
@@ -37,5 +36,6 @@ struct msm_buf_mngr_device {
 	spinlock_t buf_q_spinlock;
 	struct msm_sd_subdev subdev;
 	struct msm_sd_req_vb2_q vb2_ops;
+	uint32_t msm_buf_mngr_open_cnt;
 };
 #endif
