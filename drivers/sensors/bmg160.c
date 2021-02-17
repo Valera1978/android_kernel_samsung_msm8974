@@ -448,24 +448,24 @@ static void bmg160_work_func(struct work_struct *work)
 	struct bmg160_v gyro;
 	struct bmg160_p *data = container_of(work, struct bmg160_p, work);
 	struct timespec ts;
+	u64 timestamp_new;
 	int time_hi, time_lo;
 	u64 delay = ktime_to_ns(data->poll_delay);
 
 	get_monotonic_boottime(&ts);
-	data->timestamp = ts.tv_sec * 1000000000ULL + ts.tv_nsec;
+	timestamp_new = ts.tv_sec * 1000000000ULL + ts.tv_nsec;
 
 	ret = bmg160_read_gyro_xyz(data, &gyro);
 	if (ret < 0)
 		return;
 
 	if (data->old_timestamp != 0 &&
-	   ((data->timestamp - data->old_timestamp) > ktime_to_ms(data->poll_delay) * 1800000LL)) {
+	   ((timestamp_new - data->old_timestamp) > ktime_to_ms(data->poll_delay) * 1800000LL)) {
 
 		u64 shift_timestamp = delay >> 1;
 		u64 timestamp = 0ULL;
-		//u64 diff = 0ULL;
 
-		for (timestamp = data->old_timestamp + delay; timestamp < data->timestamp - shift_timestamp; timestamp+=delay) {
+		for (timestamp = data->old_timestamp + delay; timestamp < timestamp_new - shift_timestamp; timestamp+=delay) {
 				time_hi = (int)((timestamp & TIME_HI_MASK) >> TIME_HI_SHIFT);
 				time_lo = (int)(timestamp & TIME_LO_MASK);
 
@@ -479,8 +479,8 @@ static void bmg160_work_func(struct work_struct *work)
 		}
 	}
 
-	time_hi = (int)((data->timestamp & TIME_HI_MASK) >> TIME_HI_SHIFT);
-	time_lo = (int)(data->timestamp & TIME_LO_MASK);
+	time_hi = (int)((timestamp_new & TIME_HI_MASK) >> TIME_HI_SHIFT);
+	time_lo = (int)(timestamp_new & TIME_LO_MASK);
 
 	input_report_rel(data->input, REL_RX, gyro.x - data->caldata.x);
 	input_report_rel(data->input, REL_RY, gyro.y - data->caldata.y);
@@ -489,7 +489,7 @@ static void bmg160_work_func(struct work_struct *work)
 	input_report_rel(data->input, REL_Y, time_lo);
 	input_sync(data->input);
 	data->gyrodata = gyro;
-	data->old_timestamp = data->timestamp;
+	data->old_timestamp = timestamp_new;
 }
 
 static void bmg160_set_enable(struct bmg160_p *data, int enable)
