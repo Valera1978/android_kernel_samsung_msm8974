@@ -1,4 +1,4 @@
-/* Copyright (c) 2011-2015, 2017 The Linux Foundation. All rights reserved.
+/* Copyright (c) 2011-2013,2015 The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -56,6 +56,8 @@
 #define WCNSS_ENABLE_PC_LATENCY	PM_QOS_DEFAULT_VALUE
 #define WCNSS_PM_QOS_TIMEOUT	15000
 #define WAIT_FOR_CBC_IND     2
+#define IS_CAL_DATA_PRESENT     0
+
 /* module params */
 #define WCNSS_CONFIG_UNSPECIFIED (-1)
 #define UINT32_MAX (0xFFFFFFFFU)
@@ -158,7 +160,7 @@ static DEFINE_SPINLOCK(reg_spinlock);
 #define PRONTO_PLL_STATUS_OFFSET		0x1c
 
 #define MSM_PRONTO_MCU_BASE			0xfb080c00
-#define MCU_APB2PHY_STATUS_OFFSET               0xec
+#define MCU_APB2PHY_STATUS_OFFSET		0xec
 #define MCU_CBR_CCAHB_ERR_OFFSET		0x380
 #define MCU_CBR_CAHB_ERR_OFFSET			0x384
 #define MCU_CBR_CCAHB_TIMEOUT_OFFSET		0x388
@@ -417,7 +419,8 @@ static struct {
 	int	user_cal_read;
 	int	user_cal_available;
 	u32	user_cal_rcvd;
-	u32	user_cal_exp_size;
+	int	user_cal_exp_size;
+	int	device_opened;
 	int	iris_xo_mode_set;
 	int	fw_vbatt_state;
 	int	ctrl_device_opened;
@@ -811,7 +814,7 @@ void wcnss_pronto_log_debug_regs(void)
 	reg_addr = penv->pronto_mcu_base + MCU_APB2PHY_STATUS_OFFSET;
 	reg = readl_relaxed(reg_addr);
 	pr_err("MCU_APB2PHY_STATUS %08x\n", reg);
-	
+
 	reg_addr = penv->pronto_mcu_base + MCU_CBR_CCAHB_ERR_OFFSET;
 	reg = readl_relaxed(reg_addr);
 	pr_err("MCU_CBR_CCAHB_ERR %08x\n", reg);
@@ -943,8 +946,10 @@ void wcnss_reset_intr(void)
 {
 	if (wcnss_hardware_type() == WCNSS_PRONTO_HW) {
 		wcnss_pronto_log_debug_regs();
+#ifdef CONFIG_WCNSS_REGISTER_DUMP_ON_BITE
 		if (wcnss_get_mux_control())
 			wcnss_log_iris_regs();
+#endif
 		wmb();
 		__raw_writel(1 << 16, penv->fiq_reg);
 	} else {
@@ -962,8 +967,10 @@ void wcnss_reset_fiq(bool clk_chk_en)
 			wcnss_log_debug_regs_on_bite();
 		} else {
 			wcnss_pronto_log_debug_regs();
+#ifdef CONFIG_WCNSS_REGISTER_DUMP_ON_BITE
 			if (wcnss_get_mux_control())
 				wcnss_log_iris_regs();
+#endif
 		}
 		/* Insert memory barrier before writing fiq register */
 		wmb();
@@ -1955,12 +1962,7 @@ static void wcnssctrl_rx_handler(struct work_struct *worker)
 		penv->is_cbc_done = 1;
 		pr_debug("wcnss: received WCNSS_CBC_COMPLETE_IND from FW\n");
 		break;
-		
-	case WCNSS_CBC_COMPLETE_IND:
-		penv->is_cbc_done = 1;
-		pr_debug("wcnss: received WCNSS_CBC_COMPLETE_IND from FW\n");
-		break;
-		
+
 	case WCNSS_CALDATA_UPLD_REQ:
 		extract_cal_data(len);
 		break;
@@ -2257,7 +2259,7 @@ static void wcnss_nvbin_dnld_main(struct work_struct *worker)
 	if (!FW_CALDATA_CAPABLE())
 		goto nv_download;
 
-	if (!penv->fw_cal_available && WCNSS_CONFIG_UNSPECIFIED
+	if (!penv->fw_cal_available && IS_CAL_DATA_PRESENT
 		!= has_calibrated_data && !penv->user_cal_available) {
 		while (!penv->user_cal_available && retry++ < 5)
 			msleep(500);
@@ -2335,6 +2337,10 @@ void process_usr_ctrl_cmd(u8 *buf, size_t len)
 		break;
 
 	case WCNSS_USR_WLAN_MAC_ADDR:
+		if (WLAN_MAC_ADDR_SIZE + 2 > len) {
+			pr_err("%s: Invalid MAC address (%d byte message)\n", __func__, len);
+			return;
+		}
 		memcpy(&penv->wlan_nv_macAddr,  &buf[2],
 				sizeof(penv->wlan_nv_macAddr));
 
@@ -2610,7 +2616,7 @@ wcnss_trigger_config(struct platform_device *pdev)
 		}
 	} while (pil_retry++ < WCNSS_MAX_PIL_RETRY && IS_ERR(penv->pil));
 
-	if (IS_ERR(penv->pil)) {
+	if (pil_retry >= WCNSS_MAX_PIL_RETRY) {
 		wcnss_reset_intr();
 		if (penv->wcnss_notif_hdle)
 			subsys_notif_unregister_notifier(penv->wcnss_notif_hdle,
@@ -2727,6 +2733,14 @@ static int wcnss_node_open(struct inode *inode, struct file *file)
 			return -EFAULT;
 	}
 
+	mutex_lock(&penv->dev_lock);
+	penv->user_cal_rcvd = 0;
+	penv->user_cal_read = 0;
+	penv->user_cal_available = false;
+	penv->user_cal_data = NULL;
+	penv->device_opened = 1;
+	mutex_unlock(&penv->dev_lock);
+
 	return rc;
 }
 
@@ -2735,7 +2749,7 @@ static ssize_t wcnss_wlan_read(struct file *fp, char __user
 {
 	int rc = 0;
 
-	if (!penv)
+	if (!penv || !penv->device_opened)
 		return -EFAULT;
 
 	rc = wait_event_interruptible(penv->read_wait, penv->fw_cal_rcvd
@@ -2772,67 +2786,55 @@ static ssize_t wcnss_wlan_write(struct file *fp, const char __user
 			*user_buffer, size_t count, loff_t *position)
 {
 	int rc = 0;
-	char *cal_data = NULL;
+	size_t size = 0;
 
-	if (!penv || penv->user_cal_available)
+	if (!penv || !penv->device_opened || penv->user_cal_available)
 		return -EFAULT;
 
-	if (!penv->user_cal_rcvd && count >= 4 && !penv->user_cal_exp_size) {
-		mutex_lock(&penv->dev_lock);
-		rc = copy_from_user((void *)&penv->user_cal_exp_size,
-				    user_buffer, 4);
-		if (!penv->user_cal_exp_size ||
-		    penv->user_cal_exp_size > MAX_CALIBRATED_DATA_SIZE) {
-			pr_err(DEVICE " invalid size to write %d\n",
-			       penv->user_cal_exp_size);
-			penv->user_cal_exp_size = 0;
-			mutex_unlock(&penv->dev_lock);
+	if (penv->user_cal_rcvd == 0 && count >= 4
+			&& !penv->user_cal_data) {
+		rc = copy_from_user((void *)&size, user_buffer, 4);
+		if (!size || size > MAX_CALIBRATED_DATA_SIZE) {
+			pr_err(DEVICE " invalid size to write %d\n", size);
 			return -EFAULT;
 		}
 
-		mutex_unlock(&penv->dev_lock);
-		return count;
-	} else if (!penv->user_cal_rcvd && count < 4) {
+		rc += count;
+		count -= 4;
+		penv->user_cal_exp_size =  size;
+		penv->user_cal_data = kmalloc(size, GFP_KERNEL);
+		if (penv->user_cal_data == NULL) {
+			pr_err(DEVICE " no memory to write\n");
+			return -ENOMEM;
+		}
+		if (0 == count)
+			goto exit;
+
+	} else if (penv->user_cal_rcvd == 0 && count < 4)
 		return -EFAULT;
-	}
 
-	mutex_lock(&penv->dev_lock);
 	if ((UINT32_MAX - count < penv->user_cal_rcvd) ||
-	     (penv->user_cal_exp_size < count + penv->user_cal_rcvd)) {
-		pr_err(DEVICE " invalid size to write %zu\n", count +
+	     MAX_CALIBRATED_DATA_SIZE < count + penv->user_cal_rcvd) {
+		pr_err(DEVICE " invalid size to write %d\n", count +
 				penv->user_cal_rcvd);
-		mutex_unlock(&penv->dev_lock);
-		return -ENOMEM;
+		rc = -ENOMEM;
+		goto exit;
 	}
-
-	cal_data = kmalloc(count, GFP_KERNEL);
-	if (!cal_data) {
-		mutex_unlock(&penv->dev_lock);
-		return -ENOMEM;
-	}
-
-	rc = copy_from_user(cal_data, user_buffer, count);
-	if (!rc) {
-		memcpy(penv->user_cal_data + penv->user_cal_rcvd,
-		       cal_data, count);
+	rc = copy_from_user((void *)penv->user_cal_data +
+			penv->user_cal_rcvd, user_buffer, count);
+	if (0 == rc) {
 		penv->user_cal_rcvd += count;
 		rc += count;
 	}
-
-	kfree(cal_data);
 	if (penv->user_cal_rcvd == penv->user_cal_exp_size) {
 		penv->user_cal_available = true;
 		pr_info_ratelimited("wcnss: user cal written");
 	}
-	mutex_unlock(&penv->dev_lock);
 
+exit:
 	return rc;
 }
 
-static int wcnss_node_release(struct inode *inode, struct file *file)
-{
-	return 0;
-}
 
 static int wcnss_notif_cb(struct notifier_block *this, unsigned long code,
 				void *ss_handle)
@@ -2858,7 +2860,6 @@ static const struct file_operations wcnss_node_fops = {
 	.open = wcnss_node_open,
 	.read = wcnss_wlan_read,
 	.write = wcnss_wlan_write,
-	.release = wcnss_node_release,
 };
 
 static struct miscdevice wcnss_misc = {
@@ -2886,13 +2887,6 @@ wcnss_wlan_probe(struct platform_device *pdev)
 	}
 	penv->pdev = pdev;
 
-	penv->user_cal_data =
-		devm_kzalloc(&pdev->dev, MAX_CALIBRATED_DATA_SIZE, GFP_KERNEL);
-	if (!penv->user_cal_data) {
-		dev_err(&pdev->dev, "Failed to alloc memory for cal data.\n");
-		return -ENOMEM;
-	}
-
 	/* register sysfs entries */
 	ret = wcnss_create_sysfs(&pdev->dev);
 	if (ret) {
@@ -2912,11 +2906,6 @@ wcnss_wlan_probe(struct platform_device *pdev)
 	mutex_init(&penv->vbat_monitor_mutex);
 	mutex_init(&penv->pm_qos_mutex);
 	init_waitqueue_head(&penv->read_wait);
-
-	penv->user_cal_rcvd = 0;
-	penv->user_cal_read = 0;
-	penv->user_cal_exp_size = 0;
-	penv->user_cal_available = false;
 
 	/* Since we were built into the kernel we'll be called as part
 	 * of kernel initialization.  We don't know if userspace
