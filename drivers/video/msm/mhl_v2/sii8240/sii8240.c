@@ -57,7 +57,7 @@
 #define dev_dbg dev_info
 #endif
 
-#define CONFIG_MHL_SWING_LEVEL 1
+//#define CONFIG_MHL_SWING_LEVEL 1
 
 #ifdef CONFIG_EXTCON
 static struct sec_mhl_cable support_cable_list[] = {
@@ -75,17 +75,6 @@ static struct hdcp_auth_status g_monitor_cmd;
 
 struct class *sec_mhl;
 EXPORT_SYMBOL(sec_mhl);
-
-#ifdef SII8240_CHECK_MONITOR
-static int sii8240_scm_call(struct sii8240_data *sii8240, u32 svc_id, u32 cmd_id,
-		const void *cmd_buf, size_t cmd_len, void *resp_buf, size_t resp_len)
-{
-	int ret = 0;
-	if (sii8240->ckdt_stable)
-		ret = scm_call(svc_id, cmd_id, cmd_buf, cmd_len, resp_buf, resp_len);
-	return ret;
-}
-#endif
 
 static int mhl_write_byte_reg(struct i2c_client *client, u32 offset,
 			u8 value)
@@ -238,7 +227,7 @@ static void sii8240_link_monitor_work(struct work_struct *work)
 		g_monitor_cmd.a |= 0x08;
 		g_monitor_cmd.a &= ~(0x01);
 		del_timer_sync(&sii8240->mhl_timer);
-		sii8240_scm_call(sii8240, _SCM_SVC_OEM, _SCM_OEM_CMD, &g_monitor_cmd, sizeof(g_monitor_cmd), NULL, 0);
+		scm_call(_SCM_SVC_OEM, _SCM_OEM_CMD, &g_monitor_cmd, sizeof(g_monitor_cmd), NULL, 0);
 		pr_info("%s() g_monitor_cmd.a = %d\n", __func__, g_monitor_cmd.a);
 		pr_info("%s() : mhl status = %d\n", __func__, sii8240->state);
 		return;
@@ -261,11 +250,11 @@ static void sii8240_link_monitor_work(struct work_struct *work)
 	}
 	if (status == 0) {
 		g_monitor_cmd.a |= 0x04;
-		sii8240_scm_call(sii8240, _SCM_SVC_OEM, _SCM_OEM_CMD, &g_monitor_cmd, sizeof(g_monitor_cmd), NULL, 0);
+		scm_call(_SCM_SVC_OEM, _SCM_OEM_CMD, &g_monitor_cmd, sizeof(g_monitor_cmd), NULL, 0);
 		pr_info("%s() g_monitor_cmd.a = %d\n", __func__, g_monitor_cmd.a);
 	} else {
 		g_monitor_cmd.a |= 0x02;
-		sii8240_scm_call(sii8240, _SCM_SVC_OEM, _SCM_OEM_CMD, &g_monitor_cmd, sizeof(g_monitor_cmd), NULL, 0);
+		scm_call(_SCM_SVC_OEM, _SCM_OEM_CMD, &g_monitor_cmd, sizeof(g_monitor_cmd), NULL, 0);
 		pr_info("%s() g_monitor_cmd.a = %d\n", __func__, g_monitor_cmd.a);
 	}
 
@@ -362,7 +351,7 @@ static int sii8240_hdcp_on(struct sii8240_data *sii8240, bool hdcp_on)
 		g_monitor_cmd.b = NULL;
 		g_monitor_cmd.c = NULL;
 		g_monitor_cmd.d = 0;
-		sii8240_scm_call(sii8240, _SCM_SVC_OEM, _SCM_OEM_CMD, &g_monitor_cmd, sizeof(g_monitor_cmd), NULL, 0);
+		scm_call(_SCM_SVC_OEM, _SCM_OEM_CMD, &g_monitor_cmd, sizeof(g_monitor_cmd), NULL, 0);
 		pr_info("%s() g_monitor_cmd.a = %d\n", __func__, g_monitor_cmd.a);
 #endif
 
@@ -378,7 +367,7 @@ static int sii8240_hdcp_on(struct sii8240_data *sii8240, bool hdcp_on)
 		g_monitor_cmd.a &= ~(0x01);
 		del_timer_sync(&sii8240->mhl_timer);
 		cancel_work_sync(&sii8240->mhl_link_monitor_work);
-		sii8240_scm_call(sii8240, _SCM_SVC_OEM, _SCM_OEM_CMD, &g_monitor_cmd, sizeof(g_monitor_cmd), NULL, 0);
+		scm_call(_SCM_SVC_OEM, _SCM_OEM_CMD, &g_monitor_cmd, sizeof(g_monitor_cmd), NULL, 0);
 		pr_info("%s() g_monitor_cmd.a = %d\n", __func__, g_monitor_cmd.a);
 
 #endif
@@ -1504,6 +1493,10 @@ static int switch_to_d3(struct sii8240_data *sii8240)
 		pr_info("sii8240: interrupt enabled\n");
 	}
 
+	if (sii8240->pdata->hdmi_mhl_ops) {
+		struct msm_hdmi_mhl_ops *hdmi_mhl_ops =	sii8240->pdata->hdmi_mhl_ops;
+		hdmi_mhl_ops->set_upstream_hpd(sii8240->pdata->hdmi_pdev, 0);
+	}
 	return 0;
 }
 
@@ -1701,14 +1694,14 @@ static int sii8240_init_regs(struct sii8240_data *sii8240)
 	}
 
 	ret = mhl_modify_reg(hdmi, 0x82, BIT_MHLTX_CTL3_DAMPING_SEL_MASK,
-		sii8240->pdata->damping);
+		BIT_MHLTX_CTL3_DAMPING_SEL_OFF);
 	if (unlikely(ret < 0)) {
 		pr_err("[ERROR] sii8240: %s():%d Fail to write register\n",
 			__func__, __LINE__);
 		return ret;
 	}
 
-#if CONFIG_MHL_SWING_LEVEL
+#ifdef CONFIG_MHL_SWING_LEVEL
 	ret = mhl_modify_reg(hdmi, MHLTX_CTL4_REG, BIT_CLK_SWING_CTL_MASK |
 			BIT_DATA_SWING_CTL_MASK, sii8240->pdata->swing_level);
 	if (unlikely(ret < 0)) {
@@ -1741,7 +1734,7 @@ static int sii8240_init_regs(struct sii8240_data *sii8240)
 			return ret;
 		}
 
-#if CONFIG_MHL_SWING_LEVEL
+#ifdef CONFIG_MHL_SWING_LEVEL
 		ret = mhl_modify_reg(hdmi,
 				MHLTX_CTL4_REG, BIT_CLK_SWING_CTL_MASK |
 				BIT_DATA_SWING_CTL_MASK
@@ -1950,30 +1943,22 @@ static int sii8240_init_regs(struct sii8240_data *sii8240)
 static int sii8240_msc_req_locked(struct sii8240_data *sii8240, u8 req_type,
 				  u8 offset, u8 first_data, u8 second_data)
 {
-	int ret = 1;
+	int ret;
 	struct i2c_client *cbus = sii8240->pdata->cbus_client;
-	bool write_offset;
-	bool write_first_data;
-	bool write_second_data;
-
-	mutex_unlock(&sii8240->lock);
-	mutex_lock(&sii8240->msc_lock);
-
-	write_offset = req_type & (START_READ_DEVCAP |
+	bool write_offset = req_type & (START_READ_DEVCAP |
 			START_WRITE_STAT_SET_INT | START_WRITE_BURST);
-	write_first_data = req_type &
+	bool write_first_data = req_type &
 		(START_WRITE_STAT_SET_INT | START_MSC_MSG);
-	write_second_data = req_type & START_MSC_MSG;
+	bool write_second_data = req_type & START_MSC_MSG;
 
 	pr_info("%s() SEND:offset = 0x%x\n", __func__, offset);
-	init_completion(&sii8240->cbus_complete);
 
 	if (write_offset) {
 		ret = mhl_write_byte_reg(cbus, MSC_CMD_OR_OFFSET_REG, offset);
 		if (unlikely(ret < 0)) {
 			pr_err("[ERROR] sii8240: %s():%d failed !\n",
 					__func__, __LINE__);
-			goto err_exit;
+			return ret;
 		}
 	}
 	if (write_first_data) {
@@ -1981,7 +1966,7 @@ static int sii8240_msc_req_locked(struct sii8240_data *sii8240, u8 req_type,
 		if (unlikely(ret < 0)) {
 			pr_err("[ERROR] sii8240: %s():%d failed !\n",
 					__func__, __LINE__);
-			goto err_exit;
+			return ret;
 		}
 	}
 	if (write_second_data) {
@@ -1989,11 +1974,13 @@ static int sii8240_msc_req_locked(struct sii8240_data *sii8240, u8 req_type,
 		if (unlikely(ret < 0)) {
 			pr_err("[ERROR] sii8240: %s():%d failed !\n",
 					__func__, __LINE__);
-			goto err_exit;
+			return ret;
 		}
 	}
 
-
+	mutex_unlock(&sii8240->lock);
+	mutex_lock(&sii8240->msc_lock);
+	init_completion(&sii8240->cbus_complete);
 	ret = mhl_write_byte_reg(cbus, CBUS_MSC_CMD_START_REG, req_type);
 	if (unlikely(ret < 0)) {
 		pr_err("[ERROR] sii8240: %s():%d failed !\n",
@@ -2001,14 +1988,12 @@ static int sii8240_msc_req_locked(struct sii8240_data *sii8240, u8 req_type,
 		goto err_exit;
 	}
 
-	if (!completion_done(&sii8240->cbus_complete)) {
-		ret = wait_for_completion_timeout(&sii8240->cbus_complete,
-				msecs_to_jiffies(2000));
-		if (ret == 0)
-			pr_warn("[WARN] sii8240: %s() timeout. type:0x%X, offset:0x%X\n",
-					__func__, req_type, offset);
-		ret = ret ? 0 : -EIO;
-	}
+	ret = wait_for_completion_timeout(&sii8240->cbus_complete,
+					  msecs_to_jiffies(2000));
+	if (ret == 0)
+		pr_warn("[WARN] sii8240: %s() timeout. type:0x%X, offset:0x%X\n",
+						__func__, req_type, offset);
+	ret = ret ? 0 : -EIO;
 err_exit:
 	mutex_unlock(&sii8240->msc_lock);
 	mutex_lock(&sii8240->lock);
@@ -2156,23 +2141,18 @@ static void cbus_process_rcp_key_locked(struct sii8240_data *sii8240, u8 key)
 		switch_set_state(&sii8240->mhl_event_switch, 1);
 	}
 
-	if (key < SII8240_RCP_NUM_KEYS) {
-		if (is_key_supported(sii8240, key)) {
-			/* Report the key */
-			rcp_key_report(sii8240, sii8240->keycode[key]);
-			/* Send the RCP ack */
-			sii8240_msc_req_locked(sii8240, START_MSC_MSG, 0, MSG_RCPK, key);
-		} else {
-			/* Send a RCPE(RCP Error Message) to Peer followed by RCPK with
-			 * old key-code so that initiator(TV) can recognize
-			 * failed key code */
-			sii8240_msc_req_locked(sii8240, START_MSC_MSG,
-					0, MSG_RCPE, RCPE_KEY_INVALID);
-		}
-	} else {
-		/* Input key value is release key
-		* Send the RCP ack */
+	if (key < SII8240_RCP_NUM_KEYS && is_key_supported(sii8240, key)) {
+		/* Report the key */
+		rcp_key_report(sii8240, sii8240->keycode[key]);
+		/* Send the RCP ack */
 		sii8240_msc_req_locked(sii8240, START_MSC_MSG, 0, MSG_RCPK, key);
+	} else {
+
+		/* Send a RCPE(RCP Error Message) to Peer followed by RCPK with
+		 * old key-code so that initiator(TV) can recognize
+		 * failed key code */
+		sii8240_msc_req_locked(sii8240, START_MSC_MSG,
+				0, MSG_RCPE, RCPE_KEY_INVALID);
 	}
 }
 
@@ -2225,22 +2205,18 @@ static void sii8240_power_down(struct sii8240_data *sii8240)
 
 	mhl_hpd_control_low(sii8240);
 
-	mutex_lock(&sii8240->lock);
 	if (sii8240->irq_enabled) {
 		disable_irq_nosync(sii8240->irq);
 		sii8240->irq_enabled = false;
 		pr_info("sii8240: interrupt disabled\n");
 	}
-	mutex_unlock(&sii8240->lock);
 
 	sii8240->state = STATE_DISCONNECTED;
 
 	cancel_work_sync(&sii8240->cbus_work);
 	cancel_work_sync(&sii8240->redetect_work);
 	cancel_work_sync(&sii8240->avi_control_work);
-#ifdef SFEATURE_UNSTABLE_SOURCE_WA
 	del_timer_sync(&sii8240->avi_check_timer);
-#endif
 
 	if (sii8240->pdata->power)
 		sii8240->pdata->power(0);
@@ -3256,10 +3232,6 @@ static void sii8240_detection_restart(struct work_struct *work)
 	mutex_lock(&sii8240->lock);
 
 	pr_info("sii8240: detection restarted\n");
-	if (sii8240->pdata->hdmi_mhl_ops) {
-		struct msm_hdmi_mhl_ops *hdmi_mhl_ops =	sii8240->pdata->hdmi_mhl_ops;
-		hdmi_mhl_ops->set_upstream_hpd(sii8240->pdata->hdmi_pdev, 0);
-	}
 	if (sii8240->mhl_connected == false) {
 		pr_err("[ERROR] sii8240 : already powered off\n");
 		goto err_exit;
@@ -3316,22 +3288,10 @@ static int sii8240_mhl_onoff(unsigned long event)
 	struct sii8240_data *sii8240 = dev_get_drvdata(sii8240_mhldev);
 	int handled = MHL_CON_UNHANDLED;
 
-#ifdef CONFIG_MUIC_SUPPORT_MULTIMEDIA_DOCK
-	pr_info("sii8240_mhl_onoff mmdock debug_log event =  %lu\n", event);
-	if (event == 2)	{
-		pr_info("sii8240: mmdock connection\n");
-		sii8240->pdata->is_multimediadock = true;
-		event = 1;
-	}
-#endif
-
 	if (event == sii8240->muic_state) {
 		pr_info("sii8240 : Same muic event, Ignored!\n");
 		return MHL_CON_UNHANDLED;
 	}
-
-	if (sii8240->pdata->int_gpio_config)
-		sii8240->pdata->int_gpio_config(event);
 
 	if (event) {
 		pr_info("sii8240:detection started\n");
@@ -3348,14 +3308,6 @@ static int sii8240_mhl_onoff(unsigned long event)
 		sii8240->muic_state = MHL_DETACHED;
 		wake_unlock(&sii8240->mhl_wake_lock);
 		mutex_lock(&sii8240->lock);
-#ifdef CONFIG_MUIC_SUPPORT_MULTIMEDIA_DOCK
-		sii8240->pdata->is_multimediadock = false;
-#endif
-		if (sii8240->pdata->hdmi_mhl_ops) {
-			struct msm_hdmi_mhl_ops *hdmi_mhl_ops =	sii8240->pdata->hdmi_mhl_ops;
-			hdmi_mhl_ops->set_upstream_hpd(sii8240->pdata->hdmi_pdev, 0);
-		}
-
 		goto power_down;
 	}
 	pr_info("lock M--->%d\n", __LINE__);
@@ -3399,6 +3351,36 @@ static int sii8240_mhl_onoff(unsigned long event)
 	}
 
 	mutex_unlock(&sii8240->lock);
+
+	ret = wait_event_timeout(sii8240->wq, (sii8240->rgnd != RGND_UNKNOWN),
+				msecs_to_jiffies(T_WAIT_TIMEOUT_RGND_INT));
+
+	mutex_lock(&sii8240->lock);
+	if (ret == 0) {
+		pr_err("[ERROR] no RGND interrupt\n");
+		goto unhandled;
+	}
+	if (sii8240->rgnd == RGND_UNKNOWN) {
+		pr_err("[ERROR] RGND is UNKNOWN\n");
+		goto unhandled;
+	}
+	mutex_unlock(&sii8240->lock);
+	pr_info("sii8240: waiting for connection to be established\n");
+	ret = wait_event_timeout(sii8240->wq,
+				(sii8240->state == STATE_MHL_DISCOVERY_ON ||
+				sii8240->state == STATE_MHL_DISCOVERY_FAIL ||
+				sii8240->state == STATE_MHL_DISCOVERY_SUCCESS),
+				msecs_to_jiffies(T_WAIT_TIMEOUT_DISC_INT));
+
+	mutex_lock(&sii8240->lock);
+
+	if (sii8240->state == STATE_DISCONNECTED)
+		goto unhandled;
+	if (sii8240->state == STATE_MHL_DISCOVERY_SUCCESS)
+		pr_info("sii8240: connection established\n");
+
+	mutex_unlock(&sii8240->lock);
+
 	pr_info("sii8240: detection_callback return !\n");
 
 	return MHL_CON_HANDLED;
@@ -3435,16 +3417,9 @@ static void sii8240_extcon_work(struct work_struct *work)
 static int sii8240_extcon_notifier(struct notifier_block *self,
 		unsigned long event, void *ptr)
 {
-	struct sii8240_data *sii8240;
+	struct sii8240_data *sii8240 = dev_get_drvdata(sii8240_mhldev);
 	struct sec_mhl_cable *cable =
 		container_of(self, struct sec_mhl_cable, nb);
-
-	if (sii8240_mhldev == NULL) {
-		pr_info("%s: sii8240_mhldev is NULL\n", __func__);
-		return NOTIFY_DONE;
-	}
-	sii8240 = dev_get_drvdata(sii8240_mhldev);
-
 	pr_info("%s: '%s' is %s\n", extcon_cable_name[cable->cable_type],
 			__func__, event ? "attached" : "detached");
 
@@ -3587,7 +3562,6 @@ static int sii8240_msc_irq_handler(struct sii8240_data *sii8240, u8 intr)
 					struct msm_hdmi_mhl_ops *hdmi_mhl_ops =	sii8240->pdata->hdmi_mhl_ops;
 					hdmi_mhl_ops->set_upstream_hpd(sii8240->pdata->hdmi_pdev, 0);
 				}
-
 				sii8240->hpd_status = false;
 				sii8240->tmds_enable = false;
 				sii8240->ap_hdcp_success = false;
@@ -4613,11 +4587,6 @@ static irqreturn_t sii8240_irq_thread(int irq, void *data)
 			} else {
 				pr_info("Sii8240:HPD event low\n");
 				if (sii8240->hpd_status) {
-					if (sii8240->pdata->hdmi_mhl_ops) {
-						struct msm_hdmi_mhl_ops *hdmi_mhl_ops =	sii8240->pdata->hdmi_mhl_ops;
-						hdmi_mhl_ops->set_upstream_hpd(sii8240->pdata->hdmi_pdev, 0);
-					}
-
 					sii8240->hpd_status = false;
 					tmds_control(sii8240, false);
 					ret = mhl_modify_reg(tmds,
@@ -4662,17 +4631,10 @@ static irqreturn_t sii8240_irq_thread(int irq, void *data)
 				pr_err("[ERROR] %s() mhl_read_byte_reg : 0xA0\n", __func__);
 				goto err_exit;
 			}
-			if (value & BIT_TMDS_CSTAT_P3_PDO_MASK) {
+			if (value & BIT_TMDS_CSTAT_P3_PDO_MASK)
 				pr_info("sii8240: CKDT: stable\n");
-#ifdef SII8240_CHECK_MONITOR
-				sii8240->ckdt_stable = true;
-#endif
-			} else {
+			else
 				pr_info("sii8240: CKDT: not stable\n");
-#ifdef SII8240_CHECK_MONITOR
-				sii8240->ckdt_stable = false;
-#endif
-			}
 
 			clock_stable = true;
 		}
@@ -4863,134 +4825,12 @@ void of_sii8240_muic_mhl_notify(int event)
 }
 #endif
 
-static ssize_t sii8240_rda_mhl_version(struct device *dev,
-			struct device_attribute *attr,
-					char *buf)
-{
-	ssize_t ret = 0;
-	struct sii8240_data *sii8240 = dev_get_drvdata(sii8240_mhldev);
-
-	if (((sii8240->regs.peer_devcap[MHL_DEVCAP_MHL_VERSION] & 0xF0) >= 0x20)
-		&& (sii8240->regs.peer_devcap[MHL_DEVCAP_VID_LINK_MODE] &
-					(MHL_DEV_VID_LINK_SUPP_PPIXEL |
-					MHL_DEV_VID_LINK_SUPPYCBCR422))) {
-		ret = snprintf(buf, PAGE_SIZE, "%d\n", 2);
-	} else
-		ret = snprintf(buf, PAGE_SIZE, "%d\n", 1);
-
-	return ret;
-
-}
-static DEVICE_ATTR(mhl_version, 0644, sii8240_rda_mhl_version, NULL);
-
-static ssize_t sii8240_hdcp_status(struct class *dev,
-		struct class_attribute *attr, char *buf)
-{
-	int size;
-
-	size = snprintf(buf, 10,"%d", g_monitor_cmd.a);
-	return size;
-}
-
-static CLASS_ATTR(hdcp_status, 0444,
-		sii8240_hdcp_status, NULL);
-
-
-#if CONFIG_MHL_SWING_LEVEL
-static ssize_t sii8240_swing_test_show(struct class *dev,
-		struct class_attribute *attr, char *buf)
-{
-	struct sii8240_data *sii8240 = dev_get_drvdata(sii8240_mhldev);
-
-	u32 clk = (sii8240->pdata->swing_level >> 3) & 0x07;
-	u32 data = sii8240->pdata->swing_level & 0x07;
-	return sprintf(buf, "mhl_show_value:0x%02x(%d%d:Clk=%d,Data=%d)\n"
-			, sii8240->pdata->swing_level, clk, data, clk, data);
-
-}
-static ssize_t sii8240_swing_test_store(struct class *dev,
-		struct class_attribute *attr,
-		const char *buf, size_t size)
-{
-	struct sii8240_data *sii8240 = dev_get_drvdata(sii8240_mhldev);
-
-	if (buf[0] >= '0' && buf[0] <= '7' &&
-			buf[1] >= '0' && buf[1] <= '7')
-		sii8240->pdata->swing_level = ((buf[0] - '0') << 3) |
-			(buf[1] - '0');
-	else
-		sii8240->pdata->swing_level = 0x34; /*Clk=6 and Data=4*/
-
-	return size;
-}
-
-static CLASS_ATTR(swing, 0664,
-		sii8240_swing_test_show, sii8240_swing_test_store);
-extern int hdmi_forced_resolution;
-static ssize_t sii8240_timing_test_show(struct class *dev,
-		struct class_attribute *attr, char *buf)
-{
-	return sprintf(buf, "%d\n", hdmi_forced_resolution);
-
-}
-
-static ssize_t sii8240_timing_test_store(struct class *dev,
-		struct class_attribute *attr,
-		const char *buf, size_t size)
-{
-	int timing, ret;
-
-	ret = kstrtouint(buf, 10, &timing);
-	if (unlikely(ret < 0))
-		return size;
-
-	if (timing >= 0 && timing <= 44)
-		hdmi_forced_resolution = timing;
-	else
-		hdmi_forced_resolution = -1;
-
-	return size;
-}
-
-static CLASS_ATTR(timing, 0664,
-		sii8240_timing_test_show, sii8240_timing_test_store);
-
-#endif
-/* for factory test process */
-#ifdef CONFIG_SS_FACTORY
-#define SII_ID 0x82
-static ssize_t sii8240_test_show(struct class *dev,
-				struct class_attribute *attr,
-				char *buf)
-{
-	struct sii8240_data *sii8240 = dev_get_drvdata(sii8240_mhldev);
-	struct i2c_client *tmds = sii8240->pdata->tmds_client;
-	int size;
-	u8 sii_id = 0;
-
-	sii8240->pdata->power(1);
-	msleep(20);
-	sii8240->pdata->hw_reset();
-
-	mhl_read_byte_reg(tmds, 0x03, &sii_id);
-	pr_info("sii8240: check mhl : %X\n", sii_id);
-
-	sii8240->pdata->power(0);
-
-	size = snprintf(buf, 10, "%d\n", sii_id == SII_ID ? 1 : 0);
-	return size;
-}
-static CLASS_ATTR(test_result, 0664, sii8240_test_show, NULL);
-#endif
-
 static int __devinit sii8240_tmds_i2c_probe(struct i2c_client *client,
 			const struct i2c_device_id *id)
 {
 	int ret;
 	struct i2c_adapter *adapter = to_i2c_adapter(client->dev.parent);
 	struct sii8240_data *sii8240;
-	struct kobject *uevent_mhl;
-	struct device *mhl_dev;
 
 	dev_info(&client->dev, "success client_addr 0x%X\n", client->addr);
 
@@ -5109,73 +4949,8 @@ static int __devinit sii8240_tmds_i2c_probe(struct i2c_client *client,
 #ifdef SFEATURE_HDCP_SUPPORT
 	sii8240->mhl_ddc_bypass = mhl_ddc_bypass;
 #endif
-        sec_mhl = class_create(THIS_MODULE, "mhl");
-        if (IS_ERR(sec_mhl)) {
-                pr_err("[ERROR] Failed to create class(mhl)!\n");
-                ret = PTR_ERR(sec_mhl);
-                goto err_exit0;
-        }
-
-        mhl_dev = device_create(sec_mhl, NULL, MKDEV(MHL_MAJOR, 0),
-                                        NULL, "mhl_dev");
-        if (IS_ERR(mhl_dev)) {
-                pr_err("[ERROR] Failed to create device(mhl_dev)!\n");
-                ret = PTR_ERR(mhl_dev);
-                goto err_mhl_dev;
-        }
-
-        ret = device_create_file(mhl_dev,
-                (const struct device_attribute *)&dev_attr_mhl_version.attr);
-        if (ret) {
-                pr_err("[ERROR] Failed to create device file in sysfs entries(%s)!\n",
-                        dev_attr_mhl_version.attr.name);
-                goto err_create_file_1;
-        }
-
-#ifdef CONFIG_SS_FACTORY
-        ret = class_create_file(sec_mhl, &class_attr_test_result);
-        if (ret) {
-                pr_err("[ERROR] Failed to create device file in sysfs entries!\n");
-                goto err_create_file_2;
-        }
-#endif
-#if CONFIG_MHL_SWING_LEVEL
-        ret = class_create_file(sec_mhl, &class_attr_swing);
-        if (ret) {
-                pr_err("[ERROR] failed to create swing sysfs file\n");
-                goto err_create_file_3;
-        }
-        ret = class_create_file(sec_mhl, &class_attr_timing);
-        if (ret) {
-                pr_err("[ERROR] failed to create timing sysfs file\n");
-                goto err_create_file_4;
-        }
-
-#endif
-        ret = class_create_file(sec_mhl, &class_attr_hdcp_status);
-        if (ret) {
-                pr_err("[ERROR] failed to create hdcp_status sysfs file\n");
-                goto err_create_file_5;
-        }
-        uevent_mhl = &(mhl_dev->kobj);
 	return 0;
-err_create_file_5:
-#if CONFIG_MHL_SWING_LEVEL
-	class_remove_file(sec_mhl, &class_attr_timing);
-err_create_file_4:
-        class_remove_file(sec_mhl, &class_attr_swing);
-err_create_file_3:
-#endif
-#ifdef CONFIG_SS_FACTORY
-        class_remove_file(sec_mhl, &class_attr_test_result);
-err_create_file_2:
-#endif
-        class_remove_file(sec_mhl,
-                (const struct class_attribute *)&dev_attr_mhl_version.attr);
-err_create_file_1:
-        device_destroy(sec_mhl, MKDEV(MHL_MAJOR, 0));
-err_mhl_dev:
-        class_destroy(sec_mhl);
+
 err_exit0:
 	kfree(sii8240);
 	return ret;
@@ -5394,9 +5169,121 @@ static struct i2c_driver sii8240_cbus_i2c_driver = {
 };
 #endif
 
+static ssize_t sii8240_rda_mhl_version(struct device *dev,
+			struct device_attribute *attr,
+					char *buf)
+{
+	ssize_t ret = 0;
+	struct sii8240_data *sii8240 = dev_get_drvdata(sii8240_mhldev);
+
+	if (((sii8240->regs.peer_devcap[MHL_DEVCAP_MHL_VERSION] & 0xF0) >= 0x20)
+		&& (sii8240->regs.peer_devcap[MHL_DEVCAP_VID_LINK_MODE] &
+					(MHL_DEV_VID_LINK_SUPP_PPIXEL |
+					MHL_DEV_VID_LINK_SUPPYCBCR422))) {
+		ret = snprintf(buf, PAGE_SIZE, "%d\n", 2);
+	} else
+		ret = snprintf(buf, PAGE_SIZE, "%d\n", 1);
+
+	return ret;
+
+}
+static DEVICE_ATTR(mhl_version, 0644, sii8240_rda_mhl_version, NULL);
+
+
+#ifdef CONFIG_MHL_SWING_LEVEL
+static ssize_t sii8240_swing_test_show(struct class *dev,
+		struct class_attribute *attr, char *buf)
+{
+	struct sii8240_data *sii8240 = dev_get_drvdata(sii8240_mhldev);
+
+	u32 clk = (sii8240->pdata->swing_level >> 3) & 0x07;
+	u32 data = sii8240->pdata->swing_level & 0x07;
+	return sprintf(buf, "mhl_show_value:0x%02x(%d%d:Clk=%d,Data=%d)\n"
+			, sii8240->pdata->swing_level, clk, data, clk, data);
+
+}
+static ssize_t sii8240_swing_test_store(struct class *dev,
+		struct class_attribute *attr,
+		const char *buf, size_t size)
+{
+	struct sii8240_data *sii8240 = dev_get_drvdata(sii8240_mhldev);
+
+	if (buf[0] >= '0' && buf[0] <= '7' &&
+			buf[1] >= '0' && buf[1] <= '7')
+		sii8240->pdata->swing_level = ((buf[0] - '0') << 3) |
+			(buf[1] - '0');
+	else
+		sii8240->pdata->swing_level = 0x34; /*Clk=6 and Data=4*/
+
+	return size;
+}
+
+static CLASS_ATTR(swing, 0664,
+		sii8240_swing_test_show, sii8240_swing_test_store);
+
+extern int hdmi_forced_resolution;
+static ssize_t sii8240_timing_test_show(struct class *dev,
+		struct class_attribute *attr, char *buf)
+{
+	return sprintf(buf, "%d\n", hdmi_forced_resolution);
+
+}
+
+static ssize_t sii8240_timing_test_store(struct class *dev,
+		struct class_attribute *attr,
+		const char *buf, size_t size)
+{
+	int timing, ret;
+
+	ret = kstrtouint(buf, 10, &timing);
+	if (unlikely(ret < 0))
+		return size;
+
+	if (timing >= 0 && timing <= 44)
+		hdmi_forced_resolution = timing;
+	else
+		hdmi_forced_resolution = -1;
+
+	return size;
+}
+
+static CLASS_ATTR(timing, 0664,
+		sii8240_timing_test_show, sii8240_timing_test_store);
+#endif
+
+
+/* for factory test process */
+#ifdef CONFIG_SS_FACTORY
+#define SII_ID 0x82
+static ssize_t sii8240_test_show(struct class *dev,
+				struct class_attribute *attr,
+				char *buf)
+{
+	struct sii8240_data *sii8240 = dev_get_drvdata(sii8240_mhldev);
+	struct i2c_client *tmds = sii8240->pdata->tmds_client;
+	int size;
+	u8 sii_id = 0;
+
+	sii8240->pdata->power(1);
+	msleep(20);
+	sii8240->pdata->hw_reset();
+
+	mhl_read_byte_reg(tmds, 0x03, &sii_id);
+	pr_info("sii8240: check mhl : %X\n", sii_id);
+
+	sii8240->pdata->power(0);
+
+	size = snprintf(buf, 10, "%d\n", sii_id == SII_ID ? 1 : 0);
+	return size;
+}
+static CLASS_ATTR(test_result, 0664, sii8240_test_show, NULL);
+#endif
+
 static int __init sii8240_init(void)
 {
 	int ret;
+	struct device *mhl_dev;
+	struct kobject *uevent_mhl;
 
 	pr_info("%s sii8240: check mhl\n", __func__);
 #ifdef CONFIG_OF
@@ -5436,19 +5323,79 @@ static int __init sii8240_init(void)
 		goto err_cbus;
 	}
 #endif
-	return 0;
+	sec_mhl = class_create(THIS_MODULE, "mhl");
+	if (IS_ERR(sec_mhl)) {
+		pr_err("[ERROR] Failed to create class(mhl)!\n");
+		ret = PTR_ERR(sec_mhl);
+		goto err_sec_mhl_class;
+	}
 
+	mhl_dev = device_create(sec_mhl, NULL, MKDEV(MHL_MAJOR, 0),
+					NULL, "mhl_dev");
+	if (IS_ERR(mhl_dev)) {
+		pr_err("[ERROR] Failed to create device(mhl_dev)!\n");
+		ret = PTR_ERR(mhl_dev);
+		goto err_mhl_dev;
+	}
+
+	ret = device_create_file(mhl_dev,
+		(const struct device_attribute *)&dev_attr_mhl_version.attr);
+	if (ret) {
+		pr_err("[ERROR] Failed to create device file in sysfs entries(%s)!\n",
+			dev_attr_mhl_version.attr.name);
+		goto err_create_file_1;
+	}
+
+#ifdef CONFIG_SS_FACTORY
+	ret = class_create_file(sec_mhl, &class_attr_test_result);
+	if (ret) {
+		pr_err("[ERROR] Failed to create device file in sysfs entries!\n");
+		goto err_create_file_2;
+	}
+#endif
+#ifdef CONFIG_MHL_SWING_LEVEL
+	ret = class_create_file(sec_mhl, &class_attr_swing);
+	if (ret) {
+		pr_err("[ERROR] failed to create swing sysfs file\n");
+		goto err_create_file_3;
+	}
+
+	ret = class_create_file(sec_mhl, &class_attr_timing);
+	if (ret) {
+		pr_err("[ERROR] failed to create timing sysfs file\n");
+		goto err_create_file_4;
+	}
+#endif
+
+	uevent_mhl = &(mhl_dev->kobj);
+	return 0;
+#ifdef CONFIG_MHL_SWING_LEVEL
+err_create_file_4:
+	class_remove_file(sec_mhl, &class_attr_swing);
+err_create_file_3:
+#endif
+#ifdef CONFIG_MHL_SWING_LEVEL
+	class_remove_file(sec_mhl, &class_attr_test_result);
+err_create_file_2:
+#endif
+	class_remove_file(sec_mhl,
+		(const struct class_attribute *)&dev_attr_mhl_version.attr);
+err_create_file_1:
+	device_destroy(sec_mhl, MKDEV(MHL_MAJOR, 0));
+err_mhl_dev:
+	class_destroy(sec_mhl);
+err_sec_mhl_class:
 #ifndef CONFIG_OF
-err_cbus:
 	i2c_del_driver(&sii8240_cbus_i2c_driver);
-err_tpi:
+err_cbus:
 	i2c_del_driver(&sii8240_tpi_i2c_driver);
-err_disc:
+err_tpi:
 	i2c_del_driver(&sii8240_disc_i2c_driver);
-err_hdmi:
+err_disc:
 	i2c_del_driver(&sii8240_hdmi_i2c_driver);
-err_tmds:
+err_hdmi:
 	i2c_del_driver(&sii8240_tmds_i2c_driver);
+err_tmds:
 #endif
 #ifdef CONFIG_OF
 	i2c_del_driver(&sii8240_i2c_driver);

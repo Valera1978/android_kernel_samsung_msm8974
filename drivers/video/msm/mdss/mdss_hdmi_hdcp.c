@@ -15,13 +15,9 @@
 #include <linux/delay.h>
 #include <linux/slab.h>
 #include <linux/stat.h>
-#include <linux/module.h>
 
 #include "mdss_hdmi_hdcp.h"
-#ifndef	CONFIG_VIDEO_MHL_V2
 #include "video/msm_hdmi_hdcp_mgr.h"
-#endif
-#include "mdss_hdmi_edid.h"
 
 #define HDCP_STATE_NAME (hdcp_state_name(hdcp_ctrl->hdcp_state))
 
@@ -37,11 +33,17 @@
 
 #define HDCP_INT_CLR (BIT(1) | BIT(5) | BIT(7) | BIT(9) | BIT(13))
 
-#ifdef CONFIG_VIDEO_MHL_V2
-struct hdmi_hdcp_ctrl *hdcp_ctrl_global = NULL;
-EXPORT_SYMBOL(hdcp_ctrl_global);
-extern int hdmi_hpd_status(void);
-#endif
+struct hdmi_hdcp_ctrl {
+	u32 auth_retries;
+	u32 tp_msgid;
+	enum hdmi_hdcp_state hdcp_state;
+	struct HDCP_V2V1_MSG_TOPOLOGY cached_tp;
+	struct HDCP_V2V1_MSG_TOPOLOGY current_tp;
+	struct delayed_work hdcp_auth_work;
+	struct work_struct hdcp_int_work;
+	struct completion r0_checked;
+	struct hdmi_hdcp_init_data init_data;
+};
 
 const char *hdcp_state_name(enum hdmi_hdcp_state hdcp_state)
 {
@@ -221,7 +223,9 @@ static int hdmi_hdcp_authentication_part1(struct hdmi_hdcp_ctrl *hdcp_ctrl)
 		goto error;
 	}
 #endif
+
 	bksv = hdcp_ctrl->current_tp.bksv;
+
 	io = hdcp_ctrl->init_data.core_io;
 
 	/* Fetch aksv from QFPROM, this info should be public. */
@@ -559,8 +563,14 @@ error:
 			/* Wait until READY bit is set in BCAPS */
 			timeout_count = 50;
 			while (!(bcaps & BIT(5)) && timeout_count) {
+				extern int hdmi_hpd_status(void);
+
 				msleep(100);
 				timeout_count--;
+				if (hdmi_hpd_status() == false) {
+					DEV_INFO("%s: hdmi_hpd_status == false\n", __func__);
+					continue;
+				}
 				/* Read BCAPS at offset 0x40 */
 				memset(&ddc_data, 0, sizeof(ddc_data));
 				ddc_data.dev_addr = 0x74;
@@ -585,36 +595,29 @@ error:
 #else
 		DSS_REG_W(io, HDMI_HDCP_CTRL, BIT(0) | BIT(8));
 #endif
-
 	}
 	return rc;
 } /* hdmi_hdcp_authentication_part1 */
 
 #ifdef CONFIG_VIDEO_MHL_V2
-static int hdcp_return_value;
-static void hdmi_hdcp_auth_part1_work(struct work_struct *work)
+
+static struct hdmi_hdcp_ctrl *hdcp_ctrl_global;
+
+int hdmi_hdcp_authentication_part1_global_start(void)
 {
-	struct delayed_work *dw = to_delayed_work(work);
-	struct hdmi_hdcp_ctrl *hdcp_ctrl = container_of(dw,
-		struct hdmi_hdcp_ctrl, hdcp_auth_work);
+	if (hdcp_ctrl_global == NULL)
+		return -EINVAL;
 
-	if (!hdcp_ctrl) {
-		DEV_ERR("%s: invalid input\n", __func__);
-		return;
-	}
-
-	hdcp_return_value =
-		hdmi_hdcp_authentication_part1(hdcp_ctrl);
+	hdcp_ctrl_global->hdcp_state = HDCP_STATE_AUTHENTICATING;
+	return hdmi_hdcp_authentication_part1(hdcp_ctrl_global);
 }
 
-int hdmi_hdcp_authentication_part1_start(struct hdmi_hdcp_ctrl *hdcp_ctrl)
+void hdmi_hdcp_authentication_part1_global_authenticated(void)
 {
-	queue_delayed_work(hdcp_ctrl->init_data.workq,
-		&hdcp_ctrl->hdcp_auth_work, 0);
-
-	flush_delayed_work(&hdcp_ctrl->hdcp_auth_work);
-	return hdcp_return_value;
+	if (hdcp_ctrl_global != NULL)
+		hdcp_ctrl_global->hdcp_state = HDCP_STATE_AUTHENTICATED;
 }
+
 #endif
 
 #define READ_WRITE_V_H(off, name, reg) \
@@ -635,8 +638,6 @@ do { \
 			(buf[3] << 24 | buf[2] << 16 | buf[1] << 8 | buf[0])); \
 } while (0);
 
-
-#ifndef CONFIG_VIDEO_MHL_V2
 static int hdmi_hdcp_transfer_v_h(struct hdmi_hdcp_ctrl *hdcp_ctrl)
 {
 	char what[20];
@@ -966,7 +967,6 @@ static void hdmi_hdcp_notify_topology(struct hdmi_hdcp_ctrl *hdcp_ctrl)
 	DEV_DBG("%s Event Sent: %s msgID = %s srcID = %s\n", __func__,
 			envp[0], envp[1], envp[2]);
 }
-#endif
 
 static void hdmi_hdcp_int_work(struct work_struct *work)
 {
@@ -989,7 +989,6 @@ static void hdmi_hdcp_int_work(struct work_struct *work)
 	}
 } /* hdmi_hdcp_int_work */
 
-#ifndef CONFIG_VIDEO_MHL_V2
 static void hdmi_hdcp_auth_work(struct work_struct *work)
 {
 	int rc;
@@ -1070,7 +1069,6 @@ error:
 	}
 	return;
 } /* hdmi_hdcp_auth_work */
-#endif
 
 int hdmi_hdcp_authenticate(void *input)
 {
@@ -1453,20 +1451,18 @@ void *hdmi_hdcp_init(struct hdmi_hdcp_init_data *init_data)
 		goto error;
 	}
 
-#ifdef CONFIG_VIDEO_MHL_V2
-	INIT_DELAYED_WORK(&hdcp_ctrl->hdcp_auth_work, hdmi_hdcp_auth_part1_work);
-#else
 	INIT_DELAYED_WORK(&hdcp_ctrl->hdcp_auth_work, hdmi_hdcp_auth_work);
-#endif
 	INIT_WORK(&hdcp_ctrl->hdcp_int_work, hdmi_hdcp_int_work);
 
 	hdcp_ctrl->hdcp_state = HDCP_STATE_INACTIVE;
 	init_completion(&hdcp_ctrl->r0_checked);
 	DEV_DBG("%s: HDCP module initialized. HDCP_STATE=%s", __func__,
 		HDCP_STATE_NAME);
+
 #ifdef CONFIG_VIDEO_MHL_V2
 	hdcp_ctrl_global = hdcp_ctrl;
 #endif
+
 error:
 	return (void *)hdcp_ctrl;
 } /* hdmi_hdcp_init */
