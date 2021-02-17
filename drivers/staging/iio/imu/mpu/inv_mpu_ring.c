@@ -361,7 +361,7 @@ static int inv_lpa_mode(struct inv_mpu_state *st, int lpa_mode)
 		if (lpa_mode) {
 			d |= BIT_ACCEL_FCHOCIE_B;
 		}
-		pr_err("REG_6500_ACCEL_CONFIG2=%d",d);
+		pr_debug("REG_6500_ACCEL_CONFIG2=%d",d);
 		result = inv_i2c_single_write(st, st->reg.accel_config2, d);
 		if (result)
 			return result;
