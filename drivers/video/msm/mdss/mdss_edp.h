@@ -328,8 +328,6 @@ struct mdss_edp_drv_pdata {
 	struct dpcd_link_status link_status;
 	char v_level;
 	char p_level;
-//	char link_bw;
-//	char lane_cnt;
 	/* transfer unit */
 	char tu_desired;
 	char valid_boundary;
@@ -389,18 +387,7 @@ void mdss_edp_config_ctrl(struct mdss_edp_drv_pdata *ep);
 void mdss_edp_clk_debug(unsigned char *edp_base, unsigned char *mmss_cc_base);
 
 #if defined(CONFIG_FB_MSM_EDP_SAMSUNG)
-int aux_tx(int addr, char *data, int len);
-void tcon_interanl_clock(void);
-void read_firmware_version(char *string);
-void set_global_ep(struct mdss_edp_drv_pdata *ep);
-struct mdss_edp_drv_pdata *get_global_ep(void);
-
-extern void tcon_pwm_duty(int pwm_duty, int updata_from_backlight);
-extern int config_i2c_lane(int enable);
-
-void mdss_edp_set_backlight(struct mdss_panel_data *pdata, u32 bl_level);
-void set_backlight_first_kick_off(void);
-void edp_reg_dump(void);
-
+#include "edp-samsung.h"
 #endif
+
 #endif /* MDSS_EDP_H */

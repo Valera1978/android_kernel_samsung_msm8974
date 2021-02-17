@@ -108,7 +108,7 @@ static void backlight_request_gpio(struct edp_backlight_platform_data *pdata)
 	gpio_tlmm_config(GPIO_CFG(pdata->gpio_sda, 0, GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL, GPIO_CFG_2MA), 1);
 
 	gpio_set_value(pdata->gpio_backlight_en,0);
-	pr_info("%s %d", __func__, gpio_get_value(pdata->gpio_backlight_en));
+	pr_debug("%s %d", __func__, gpio_get_value(pdata->gpio_backlight_en));
 #else
 	gpio_tlmm_config(GPIO_CFG(pdata->gpio_scl, 0, GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL, GPIO_CFG_2MA), 1);
 	gpio_tlmm_config(GPIO_CFG(pdata->gpio_sda, 0, GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL, GPIO_CFG_2MA), 1);
@@ -162,7 +162,6 @@ static u8 ndra_setting[][2] ={
 	{0xAF, 0x01},
 };
 
-extern void restore_set_tcon(void);
 void edp_backlight_power_enable(void)
 {
 	int i;
@@ -179,10 +178,10 @@ void edp_backlight_power_enable(void)
 		backlight_i2c_write(info->client, ndra_setting[i][0], ndra_setting[i][1], 1);
 	}
 
-	pr_info("%s LSI_NDRA ", __func__);
+	pr_debug("%s LSI_NDRA ", __func__);
 }
 
-void edp_backlight_enable(void)
+void edp_backlight_enable(struct mdss_edp_drv_pdata *ep)
 {
 	int i;
 	struct edp_backlight_info *info = pinfo;
@@ -194,13 +193,13 @@ void edp_backlight_enable(void)
 
 	gpio_set_value(info->pdata->gpio_backlight_en,1);
 
-	restore_set_tcon();
+	restore_set_tcon(ep);
 
 	for (i = 0; i < ARRAY_SIZE(ndra_setting) ;i++) {
 		backlight_i2c_write(info->client, ndra_setting[i][0], ndra_setting[i][1], 1);
 	}
 
-	pr_info("%s LSI_NDRA ", __func__);
+	pr_debug("%s LSI_NDRA ", __func__);
 }
 
 void edp_backlight_disable(void)
@@ -215,18 +214,6 @@ void edp_backlight_disable(void)
 	gpio_set_value(info->pdata->gpio_backlight_en, 0);
 }
 
-int edp_backlight_status(void)
-{
-	struct edp_backlight_info *info = pinfo;
-
-	if (!info) {
-		pr_info("%s error pinfo", __func__);
-		return -ENODEV;
-	}
-
-	return gpio_get_value(info->pdata->gpio_backlight_en);
-}
-
 static int __devinit edp_backlight_probe(struct i2c_client *client,
 				  const struct i2c_device_id *id)
 {
@@ -236,7 +223,7 @@ static int __devinit edp_backlight_probe(struct i2c_client *client,
 
 	int error = 0;
 
-	pr_info("%s", __func__);
+	pr_debug("%s", __func__);
 
 	if (!i2c_check_functionality(adapter, I2C_FUNC_I2C))
 		return -EIO;
