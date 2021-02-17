@@ -4704,6 +4704,12 @@ config MSM_CPU_PWRCTL
 	  stand alone power collapse operation. Selecting this option
 	  ensures that they are always off.
 
+config MACH_TABPRO
+	bool "Support for Samsung tabpro family of devices"
+	help
+	  Support for common elements between mondrianwifi, mondrian3g,
+	  mondrianlte, picassolte and viennalte.
+
 config SEC_THERMISTOR
         bool "Use external thermistor near AP for checking temprature"
         default n

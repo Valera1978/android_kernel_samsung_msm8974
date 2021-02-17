@@ -19,7 +19,9 @@
 			reg = <0>;
 			cell-index = <0>;
 			spi-max-frequency = <50000000>;
-			qcom,eeprom-name = "fidelix";			qcom,eeprom-id0 = <0xf8 0x14>;			qcom,eeprom-id1 = <0xef 0x14>;
+			qcom,eeprom-name = "fidelix";
+			qcom,eeprom-id0 = <0xf8 0x14>;
+			qcom,eeprom-id1 = <0xef 0x14>;
 
 			qcom,cal-num-blocks = <8>;
 			qcom,cal-page0 = <0 0x0 0 0x0 0 0>;
@@ -75,13 +77,14 @@
 };
 
 &cci {
+
     qcom,camera@34 {
 		compatible = "qcom,imx134";
 		reg = <0x34>;
 		qcom,slave-id = <0x34 0x16 0x0134>;
 		qcom,csiphy-sd-index = <0>;
 		qcom,csid-sd-index = <0>;
-		qcom,actuator-src = <&actuator1>;
+		qcom,actuator-src = <&actuator1>;	
 		qcom,led-flash-src = <&led_flash0>;
 		qcom,eeprom-src = <&eeprom0>;
 		qcom,mount-angle = <90>;
@@ -89,11 +92,12 @@
 
 		cam_vdig-supply = <&pm8941_lvs2>;
 		cam_vio-supply = <&pm8941_lvs2>;
-		qcom,cam-vreg-name ="cam_vdig", "cam_vio";
-		qcom,cam-vreg-type = <1 1>;
-		qcom,cam-vreg-min-voltage = <1825000 1825000>;
-		qcom,cam-vreg-max-voltage = <1825000 1825000>;
-		qcom,cam-vreg-op-mode = <105000 105000>;
+		qcom,cam-vreg-name = "cam_vdig", "cam_vio",
+				     "cam_vaf";
+		qcom,cam-vreg-type = <0 1 0>;
+		qcom,cam-vreg-min-voltage = <1100000 1825000 2850000>;
+		qcom,cam-vreg-max-voltage = <1100000 1825000 2850000>;
+		qcom,cam-vreg-op-mode = <105000 105000 100000>;
 		qcom,gpio-no-mux = <0>;
 		gpios = <&msmgpio 15 0>,
 			<&pm8941_gpios 25 0>,
@@ -180,21 +184,24 @@
 		status = "ok";
 	};
 
+        /* This is mondrian's rear camera */
 	qcom,camera@0 {
 		cell-index = <0>;
 		compatible = "qcom,camera";
 		reg = <0x0>;
 		qcom,csiphy-sd-index = <0>;
 		qcom,csid-sd-index = <0>;
+		qcom,mount-angle = <270>;
 		qcom,actuator-src = <&actuator1>;
 		qcom,led-flash-src = <&led_flash0>;
 		cam_vdig-supply = <&pm8941_lvs2>;
 		cam_vio-supply = <&pm8941_lvs2>;
-		qcom,cam-vreg-name ="cam_vdig", "cam_vio";
-		qcom,cam-vreg-type = <1 1>;
-		qcom,cam-vreg-min-voltage = <1825000 1825000>;
-		qcom,cam-vreg-max-voltage = <1825000 1825000>;
-		qcom,cam-vreg-op-mode = <105000 105000>;
+		qcom,cam-vreg-name = "cam_vdig", "cam_vio",
+				     "cam_vaf";
+		qcom,cam-vreg-type = <0 1 0>;
+		qcom,cam-vreg-min-voltage = <1100000 1825000 2850000>;
+		qcom,cam-vreg-max-voltage = <1100000 1825000 2850000>;
+		qcom,cam-vreg-op-mode = <105000 105000 100000>;
 		qcom,gpio-no-mux = <0>;
 		gpios = <&msmgpio 15 0>,
 			<&pm8941_gpios 25 0>,
@@ -218,12 +225,14 @@
 		status = "ok";
 	};
 
+        /* This is mondrian's front camera */
  	qcom,camera@2 {
 		cell-index = <2>;
 		compatible = "qcom,camera";
 		reg = <0x2>;
 		qcom,csiphy-sd-index = <2>;
 		qcom,csid-sd-index = <2>;
+		qcom,mount-angle = <270>;
                 cam_vdig-supply = <&pm8941_lvs3>;
 		cam_vana-supply = <&pm8941_lvs3>;
 		cam_vio-supply = <&pm8941_lvs3>;
